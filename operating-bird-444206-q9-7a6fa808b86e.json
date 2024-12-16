@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "operating-bird-444206-q9",
+  "private_key_id": "7a6fa808b86e48351befbecca2eb6fbdf308f79d",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDIi5Hl+fwQrl+T\n6aVGFxDTQRdH0rhStF5J5cbHJ/VOlUSSKu839xx+N+eRvaZIwbJuElMRAQgYsbn5\nHv6lCaIM7dgyTCfXJU5vhnSiYOHkEeXRuFVALBOrE3D2pTU+cbrVJYUtdr0peHh4\nQa43tqXGtYIUgQWaG3iJ7hmgypIxtCA/AHtzhjD6MBC3LJi5KxKXQBqcbrTuoGdQ\nja9y91LuBAljhZqfjpH0U/r2YRX3RD/b+VdhRmmgEUeusZVBadH2VT/75D4oQJR8\nnjjxF/3XJhSMFtHGT5tamXoEWLy32q/lQGVOvzUl2+05jznSqFYAl0jC23Y+bscg\ndbXJD93JAgMBAAECggEAD32zfYylv0qe7Kuoxf0gYjcmE5jX/uB6o5HtnMLuCJ3Q\nZAuPuraag3fxSfFYu8hFjonZE4hNPi4VV+RgZnJz63SAZaM7FRwHPudnkUbzUAUf\nZ+epoyk8dDOuX0kD78DEfjQ1oT1Jr59EDAMD0H8p90tcQtX0DzNFyH7FSUW4jQDy\nVuSEEak94x7y2N0RlNrqICHhjbQ8R8FTZD+k/lKd96q9cyUNStptDCGx4QeEBHZF\n7uFB5mv3W9hELVyGcr9u5XgqkaSRyZr8laUc/fhncOz1evHsoa5CXUZTKquB+uBi\nDbVZmmsJWxQJfSuFaYyNSqFnX3/PQWzg4ylt0FeBQQKBgQDjOT4XLGUT7X790Tts\n0cjihWaatgolBbLpFOPixJS1tvQ9YGs4nEZSQCjiZqAdUegP4rhofZh8bMf7Jovn\nvsno8ZCj2S+cfacptL+jbvD+cY/Tz9AHqehkSw+ym9Xut/tTXeJtCp/ZolOj8GvN\nL+KX4RZGtrvJRYA+ljOLHxNpwQKBgQDh8WTDzoGXNNBgs7fxUSfLRTihNuP/SFcK\n3lEvDw4hR/D5tqex+UilUc/OMdB0qV2bz5muNWzERJF92wauo/zBFIrbpb4CYJvs\nXsOeDoMjnOolQYfzRnaZNRa/7jt06KlwdgbXpEqn9lRq+sSxCItujlD8cGfgIvEP\nA5iFYk6mCQKBgQDQGyJB6RgeGztezd3GOZDp3lHtymIaLFEC5m4cx/yHPSwOdptc\n+svxEvAfAu0MTXLj8bsBgF5DPwIdhN1H/9Y+8deOKSFRC0gpi3ClB7vS3kFjNgaK\nrlO4X4LeC5nxDDIz1V3Gjp9+nQxLrquc/olinvVfCIeOvIfLSpekiG6oQQKBgBCf\nyEA384UCl8plrsUMqZblMvN5rHDeC7l6/hIuU2XTe0GEVPZdVyEC0f1j4OiUhZSv\nQ6lzuNsACIxwDx/OZQx3zHe4zDA0l4RevJnmi3OVWgz/s1cM+jDvnQrmJm3FqKHj\nrUE0j2GoWDG+3bYA4PFzezX3t0zghUgLha9aulqxAoGBAJ3qte7yUtPwEeawKvqX\nR0/f8unb2YUukj3/bV9QVpnK1fb6Zy2fPSR4cAFiUZaJfFo0fS6wK3N0ecLNeDCl\nzk0bpziDF+71koUV9U74Y41qBJjqU4EkiC1pBkMoFHnatC6YjMApgx6wwbYS6p//\nBpmLxvcZe5IhSbXUeHedKydA\n-----END PRIVATE KEY-----\n",
+  "client_email": "yerang@operating-bird-444206-q9.iam.gserviceaccount.com",
+  "client_id": "105591147077120794478",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/yerang%40operating-bird-444206-q9.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
