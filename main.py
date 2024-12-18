@@ -14,7 +14,7 @@ from google.cloud.vision_v1 import types
 from ultralytics import YOLO  # YOLOv8 모델 사용
 
 # Google Vision API 설정
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "operating-bird-444206-q9-7a6fa808b86e.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "charged-sector-444906-k4-51a2ddac9acf.json"
 
 # YOLO 모델 불러오기
 model = YOLO('product.pt')  # 학습된 YOLO 모델 경로
@@ -75,42 +75,135 @@ def crop_box(image, box):
     x1, y1, x2, y2 = map(int, box)
     return image[y1:y2, x1:x2]
 
+
+def process_detections(frame, detections, alpha=0.6, conf_threshold=0.80, sharpness_threshold=300):
+    """
+    alpha: 신뢰도와 선명도 가중치 (0.0 <= alpha <= 1.0)
+    sharpness_threshold: 선명도의 최소 임계값.
+    """
+    best_crop = None
+    best_score = -1
+
+    for detection in detections:
+        box = detection[:4].tolist()
+        conf = detection[4].item()
+
+        if conf < conf_threshold:  # 신뢰도 필터링
+            continue
+
+        cropped = crop_box(frame, box)
+
+        # 선명도 계산
+        sharpness = calculate_sharpness(cropped)
+        if sharpness < sharpness_threshold:  # 선명도가 너무 낮으면 무시
+            continue
+
+        # 종합 점수 계산
+        score = alpha * conf + (1 - alpha) * sharpness
+
+        # 최적의 Crop 업데이트
+        if score > best_score:
+            best_score = score
+            best_crop = cropped
+
+    return best_crop, best_score
+
 class VideoApp(QWidget):
     def __init__(self):
         super().__init__()
         self.initUI()
 
         # YOLO 모델 로드
-        self.model = YOLO('best2.pt')  # 초기 YOLOv8 모델 경로 (학습 모델 파일)
+        self.model = YOLO('corner.pt')  # 초기 YOLOv8 모델 경로 (학습 모델 파일)
         self.product_model = YOLO('product.pt')  # 제품모드 YOLOv8 모델 경로 (학습 모델 파일)
         self.current_model = self.model  # 현재 사용 중인 모델
 
+        # 모델을 GPU로 이동
+        self.model.to('cuda')
+        self.product_model.to('cuda')
+
         # 입력 영상 파일
-        self.video_path = 'test2.mp4'  # 기본 영상 경로
+        self.video_path = 'demo2.mp4'  # 기본 영상 경로
         self.cap = cv2.VideoCapture(self.video_path)
 
         # 초기 변수
         self.prev_frame = None
         self.pixel_diffs = []  # 프레임 간 차이값 저장
         self.CALIBRATION_FRAMES = 30  # 초기 캘리브레이션 프레임 수
-        self.MOVEMENT_THRESHOLD = 18598152  # 실험적으로 지정
-        self.NO_MOVEMENT_DURATION = 2  # 정지 상태 지속 시간 (초)
-        self.no_movement_start = None
-        self.frame_count = 0  # 처리된 프레임 수를 추적
-        self.tag_found = False  # tag 라벨 인식 여부
-        self.nutri_found = False  # nutri 라벨 인식 여부
-        self.hand_detected = False  # hand 라벨 인식 여부
 
-        # 누적된 객체 저장
-        self.detected_objects = {'tag': None, 'nutri': None, 'hand': None}
+        self.no_movement_start = None
 
         # 타이머 설정
-        self.timer = QTimer()
+        self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
-        self.timer.start(30)
+
+        # 3초 후에 타이머 시작
+        self.start_timer = QTimer(self)
+        self.start_timer.setSingleShot(True)
+        self.start_timer.timeout.connect(self.start_processing)
+        self.start_timer.start(5000)  # 3초 대기
+
+        # TTS 타이머 설정
+        self.tts_timer = QTimer(self)
+        self.tts_timer.setInterval(500)  # 2초 간격
+        self.tts_timer.setSingleShot(True)
+        self.tts_timer.timeout.connect(self.read_tts_queue)
+
+        # 제품모드 전환 지연 타이머 설정
+        self.product_mode_delay_timer = QTimer(self)
+        self.product_mode_delay_timer.setInterval(10000)  # 5초 간격
+        self.product_mode_delay_timer.setSingleShot(True)
+        self.product_mode_delay_timer.timeout.connect(self.enable_product_mode)
+
+        # 크롭 저장 변수
+        self.tag_crops = []
+        self.nutri_crops = []
+        # 라벨 인식 여부 초기화
+        self.tag_found = False
+        self.nutri_found = False
+        self.hand_detected = False
+        # 프레임 수 초기화
+        self.frame_count = 0
+        # 제품모드 전환 가능 여부 초기화
+        self.can_switch_to_product_mode = True
+        # 코너 읽기 플래그 초기화
+        self.corner_read = False
+
+        self.SHARPNESS_THRESHOLD = 0
+        self.NO_MOVEMENT_DURATION = 0.5
+
+        self.tag_crops = []
+        self.nutri_crops = []
+        self.original_tag_crops = []
+        self.original_nutri_crops = []
+
+    def start_processing(self):
+        self.timer.start(10)  # 30ms마다 프레임 업데이트
+
+    def enable_product_mode(self):
+        self.can_switch_to_product_mode = True
+        self.hand_detected = False  # 제품모드 전환 가능 시 초기화
+        self.corner_read = False  # 코너 읽기 플래그 초기화
+        print("코너읽기 false")
+        print(self.corner_read)
+        print( self.tts_timer.isActive())
+        
+
+    def read_tts_queue(self):
+        if not tts_queue.empty():
+            text = tts_queue.get()
+            # TTS 읽기 함수 호출 (예: pyttsx3 또는 다른 TTS 라이브러리 사용)
+            print(f"TTS: {text}")  # 디버깅용 출력
+            tts_thread = threading.Thread(target=self.tts_speak, args=(text,))
+            tts_thread.start()
+
+    def tts_speak(self, text):
+        tts_engine.say(text)
+        tts_engine.runAndWait()
+        self.tts_timer.start()
 
     def initUI(self):
-        self.setWindowTitle('코너모드')
+        self.setWindowTitle('뷰메이트')
         self.setGeometry(100, 100, 1280, 960)  # 창 크기 고정
 
         self.original_label = QLabel(self)
@@ -148,6 +241,7 @@ class VideoApp(QWidget):
         self.setLayout(main_layout)
 
     def update_frame(self):
+        
         if self.current_model == self.product_model:
             self.process_product_mode()
         else:
@@ -158,50 +252,43 @@ class VideoApp(QWidget):
         if not ret:
             self.cap.release()
             return
+        
+        self.display_frame(frame, self.original_label)
 
-        # 프레임 너비 계산 (왼쪽, 정면, 오른쪽을 나누기 위해)
         frame_width = frame.shape[1]
         left_boundary = frame_width // 3
         right_boundary = 2 * frame_width // 3
 
-        # 그레이스케일 변환
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # 코너모드가 ON일 때 움직임이 없을 때만 객체 검출
         if self.prev_frame is not None:
-            frame_diff = cv2.absdiff(self.prev_frame, gray_frame)
-            diff_sum = np.sum(frame_diff)  # 픽셀 차이의 총합
-            #print(diff_sum)
+            sharpness = calculate_sharpness(frame)
+            # print(f"Sharpness: {sharpness}")  # 주석 처리
 
-            # 움직임 여부 판단
-            if diff_sum < self.MOVEMENT_THRESHOLD:
+            if sharpness > self.SHARPNESS_THRESHOLD:
                 if self.no_movement_start is None:
                     self.no_movement_start = time.time()
                 elif time.time() - self.no_movement_start >= self.NO_MOVEMENT_DURATION:
-                    print("Camera movement stopped for 2 seconds. Running object detection...")
+                    print("Camera sharpness is high for 2 seconds. Running object detection...")
 
-                    # YOLO 모델로 객체 감지
                     results = self.current_model(frame, verbose=False)
                     self.detect_objects(frame, results)
-                    self.display_frame(frame, self.detected_label)
 
-                    # 정지 상태 트리거 초기화
                     self.no_movement_start = None
             else:
                 self.no_movement_start = None
 
         self.prev_frame = gray_frame
 
-        # 원본 프레임을 QLabel에 표시
-        self.display_frame(frame, self.original_label)
 
-        # hand 클래스가 감지되면 제품모드로 전환
-        if self.hand_detected:
+
+        if self.hand_detected and self.can_switch_to_product_mode:
+            print("제품모드")
             self.current_model = self.product_model
-            self.frame_count = 0  # 프레임 수 초기화
-            self.tag_found = False  # tag 라벨 인식 여부 초기화
-            self.nutri_found = False  # nutri 라벨 인식 여부 초기화
-            self.hand_detected = False  # hand 라벨 인식 여부 초기화
+            self.frame_count = 0
+            self.tag_found = False
+            self.nutri_found = False
+            self.hand_detected = False
 
     def process_product_mode(self):
         ret, frame = self.cap.read()
@@ -209,41 +296,40 @@ class VideoApp(QWidget):
             self.cap.release()
             return
 
-        # 원본 프레임을 QLabel에 표시
         self.display_frame(frame, self.original_label)
 
-        # 제품모드가 ON일 때 실시간 객체 검출
         results = self.current_model(frame, verbose=False)
         self.detect_objects(frame, results)
 
-        # 각 라벨이 한 번씩 인식되었고 10프레임을 처리한 경우 OCR과 crop 결과 표시 후 제품모드 OFF로 전환
-        if self.frame_count >= 10 and self.tag_found and self.nutri_found:
-            best_tag = self.select_best_crop(self.detected_objects, 'tag')
-            best_nutri = self.select_best_crop(self.detected_objects, 'nutri')
+        if self.frame_count > 0:
+            self.frame_count += 1
+
+        if self.frame_count >= 120 and self.tag_found and self.nutri_found:
+            best_tag = self.select_best_crop(self.original_tag_crops)
+            best_nutri = self.select_best_crop(self.original_nutri_crops)
 
             if best_tag and best_nutri:
-                self.display_crop(best_tag[1], self.tag_crop_label)
-                tag_info = extract_tag_info(best_tag[1])
-                self.ocr_result.append("제품정보:\n" + tag_info)
+                self.display_crop(best_tag[0], self.tag_crop_label)
+                tag_info = extract_tag_info(best_tag[0])
+                self.ocr_result.append("\n제품정보:\n" + tag_info)
                 tts_queue.put("제품정보: " + " ".join(tag_info.split()[:5]))
 
-                self.display_crop(best_nutri[1], self.nutri_crop_label)
-                nutri_info = extract_nutri_info(best_nutri[1])
+                self.display_crop(best_nutri[0], self.nutri_crop_label)
+                nutri_info = extract_nutri_info(best_nutri[0])
                 self.ocr_result.append("\n영양 정보:\n" + nutri_info)
                 tts_queue.put("영양 정보: " + " ".join(nutri_info.split()[:5]))
 
-                # 창 초기화
-                self.clear_display()
-
-                # 제품모드 OFF로 전환
+                # 제품모드 OFF로 전환 및 5초 동안 전환 불가 설정
                 self.current_model = self.model
+                self.can_switch_to_product_mode = False
+                self.product_mode_delay_timer.start()
+                print("코너모드")
 
-    def clear_display(self):
-        self.original_label.clear()
-        self.detected_label.clear()
-        self.tag_crop_label.clear()
-        self.nutri_crop_label.clear()
-        self.ocr_result.clear()
+                # OCR을 수행한 후 초기화
+                self.tag_crops = []
+                self.nutri_crops = []
+                self.original_tag_crops = []
+                self.original_nutri_crops = []
 
     def display_frame(self, frame, label):
         # 프레임을 QImage로 변환
@@ -258,41 +344,63 @@ class VideoApp(QWidget):
         # QLabel에 이미지 설정
         label.setPixmap(QPixmap.fromImage(scaled_qt_image))
 
-    def detect_objects(self, frame, results):
-        # 객체 정보 구분
+    def detect_objects(self, frame, results, max_crops=10, alpha=0.5):
+       
+
         for result in results:
-            boxes = result.boxes
+            boxes = result.boxes.data
             for box in boxes:
-                class_id = int(box.cls[0])  # 클래스 ID
-                confidence = box.conf[0]  # 신뢰도
-                label = self.current_model.names[class_id]  # 클래스 이름
-                x1, y1, x2, y2 = map(int, box.xyxy[0])  # Bounding Box 좌표
+                x1, y1, x2, y2, conf, class_id = box[:6]
+                class_id = int(class_id)
+                label = self.current_model.names[class_id]
 
-                crop = crop_box(frame, (x1, y1, x2, y2))
-                if label in self.detected_objects:
-                    if self.detected_objects[label] is None or self.detected_objects[label][2] < confidence:
-                        self.detected_objects[label] = (label, crop, confidence)
+                if conf < 0.5:
+                    continue
 
-                # 디버깅 출력
-                print(f"Detected {label}: {self.detected_objects[label]}")
+                # Crop 원본 이미지 저장
+                original_crop = frame[int(y1):int(y2), int(x1):int(x2)]  # 라벨링 전 원본 crop
+             
+                
 
-                # 감지된 객체 박스 그리기
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                text = f"{label} ({confidence:.2f})"
-                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
-                text_x = x1
-                text_y = y1 + text_size[1] + 10 if y1 + text_size[1] + 10 < frame.shape[0] else y1 - 10
-                cv2.putText(frame, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-                # 라벨 인식 여부 업데이트
                 if label == 'tag':
                     self.tag_found = True
+                    processed, score = process_detections(frame, [box], alpha)
+                    if processed is not None:
+                        self.tag_crops.append((processed, score))
+                        self.original_tag_crops.append((original_crop.copy(), score))
+                    if self.frame_count == 0:
+                        self.frame_count = 1  # 첫 detect 후 frame_count 시작
                 elif label == 'nutri':
                     self.nutri_found = True
+                    processed, score = process_detections(frame, [box], alpha)
+                    if processed is not None:
+                        self.nutri_crops.append((processed, score))
+                        self.original_nutri_crops.append((original_crop.copy(), score))
+                    if self.frame_count == 0:
+                        self.frame_count = 1  # 첫 detect 후 frame_count 시작
                 elif label == 'hand':
                     self.hand_detected = True
+                elif label in ['snack', 'beverage', 'instant', 'ramen']:
+                    if not self.corner_read :
+                        tts_queue.put(f"{label} corner")
+                        self.read_tts_queue()
+                        self.corner_read = True  # 코너 읽기 플래그 설정
+                        print("코너읽기 true")
 
-        self.frame_count += 1
+                print(f"Detected {label}")
+
+                cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                text = f"{label} ({conf:.2f})"
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+                text_x = int(x1)
+                text_y = int(y1) + text_size[1] + 20 if int(y1) + text_size[1] + 20 < frame.shape[0] else int(y1) - 10
+                cv2.putText(frame, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
+
+                # 신뢰도가 0.5 이상인 프레임을 오른쪽 위에 표시
+                self.display_frame(frame, self.detected_label)
+
+
 
     def display_crop(self, crop, label):
         # 크롭된 이미지를 QImage로 변환
@@ -308,10 +416,14 @@ class VideoApp(QWidget):
             # QLabel에 이미지 설정
             label.setPixmap(QPixmap.fromImage(scaled_qt_image))
 
-    def select_best_crop(self, detected_objects, class_name):
-        if detected_objects[class_name] is None:
-            return None
-        return detected_objects[class_name]
+    def select_best_crop(self, crops):
+        best_crop = None
+        
+        for crop, score in crops:
+            if best_crop is None or score > best_crop[1]:
+                best_crop = (crop, score)
+        
+        return best_crop
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
